@@ -1,0 +1,232 @@
+---
+title: "Electric Vehicles in Washington State: Data Exploration"
+author: "Porter Malloy"
+date: "11/08/2026"
+---
+
+```{r setup, include=FALSE}
+
+install.packages("tidyr")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("readr")
+install.packages("knitr")
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(knitr)
+```
+
+# Introduction
+
+This project looks at electric cars registered in Washington State, in different cities, and which ones are the most popular. It could help someone pick which electric car to buy, and it could show which cars fit best in a given city, since cities may have more of the chargers that work with certain cars.
+
+**Primary objective:** clean and organize the data so I can clearly see which cars are most popular in each city.
+**Secondary objectives:** learn what types of electric cars there are, and which cities have the most electric cars.
+
+**Data source:** *Electric Vehicle Population Data*, Battery Electric Vehicles (BEVs) and Plug-in Hybrid Electric Vehicles (PHEVs) currently registered through the Washington State Department of Licensing. Link: <https://catalog.data.gov/dataset/electric-vehicle-population-data>
+
+For this report I use only four columns from the file: **make, model, city, and EV type**. These are the columns I need to answer which cars are most popular in each city.
+
+# Loading the Data
+
+```{r load}
+# The CSV must be in the same folder as this .Rmd
+ev_raw <- read_csv("washington electric cars data.csv", show_col_types = FALSE)
+
+# Keep only the four columns I need, with short names
+ev <- ev_raw %>%
+  select(make = Make, model = Model, city = City, ev_type = `Electric Vehicle Type`)
+
+# Make a version of city with consistent capitalization (see the cleanliness section)
+ev <- ev %>%
+  mutate(city = gsub("\\b([a-z])", "\\U\\1", tolower(trimws(city)), perl = TRUE))
+
+glimpse(ev)
+```
+
+# 1. Data Dictionary
+
+```{r dictionary}
+tribble(
+  ~Variable, ~Description, ~Type,
+  "make", "Manufacturer of the vehicle (e.g., Tesla, Nissan)", "Categorical",
+  "model", "Model name of the vehicle (e.g., Model Y, Leaf)", "Categorical",
+  "city", "City in Washington (or elsewhere) where the vehicle is registered", "Categorical",
+  "ev_type", "Battery Electric Vehicle (BEV, fully electric) or Plug-in Hybrid Electric Vehicle (PHEV, electric plus gas engine)", "Categorical"
+) %>% kable()
+```
+
+All four of my features are categorical. There are no continuous variables in this selection, so for the histogram requirement I use bar charts for counts and one histogram of how many vehicles each city has.
+
+# 2. Overall Dimensions
+
+```{r dims}
+n_rows <- nrow(ev)
+n_cols <- ncol(ev)
+n_cols_orig <- ncol(ev_raw)
+
+dim(ev)
+```
+
+After selecting my columns, the data has **`r format(n_rows, big.mark = ",")` rows** and **`r n_cols` columns**. The original file had `r n_cols_orig` columns, and I kept only the four I need. Each row is one registered electric vehicle.
+
+```{r unique}
+tibble(Variable = names(ev), `Distinct values` = sapply(ev, n_distinct)) %>% kable()
+```
+
+This table shows how many different values each column has. There are only a few vehicle types, about 50 makes and about 200 models, but nearly 1,000 cities, so the city column has the most variety.
+
+# 3. Summary Statistics
+
+## 3.1 Electric vehicle type (BEV vs. PHEV)
+
+```{r type}
+type_tbl <- ev %>% count(ev_type, sort = TRUE) %>% mutate(percent = round(100 * n / sum(n), 1))
+kable(type_tbl)
+ggplot(type_tbl, aes(x = reorder(ev_type, -n), y = n)) +
+  geom_col(fill = "green") +
+  labs(title = "BEV vs. PHEV", x = NULL, y = "Number of vehicles")
+```
+
+This table and bar chart compare fully electric cars (BEV) with plug-in hybrids (PHEV). The most common type is Battery electric vehicles.
+
+## 3.2 Make
+
+```{r makes}
+make_tbl <- ev %>% count(make, sort = TRUE) %>% mutate(percent = round(100 * n / sum(n), 1))
+kable(head(make_tbl, 15))
+ggplot(head(make_tbl, 15), aes(x = reorder(make, n), y = n)) +
+  geom_col(fill = "orange") + coord_flip() +
+  labs(title = "Top 15 EV Makes in Washington", x = "Make", y = "Number of vehicles")
+```
+
+The table and chart show which manufacturers have the most registered EVs. Tesla leads with the most bought of all vehicles being almost 125000, and the next make not even being 25000. There are 15 makes in total. Tesla dominates the area while a handful have a small share each, and many have very few cars.
+
+## 3.3 Model
+
+```{r models}
+model_tbl <- ev %>% count(make, model, sort = TRUE) %>% mutate(percent = round(100 * n / sum(n), 1))
+kable(head(model_tbl, 15))
+ggplot(head(model_tbl, 15), aes(x = reorder(paste(make, model), n), y = n)) +
+  geom_col(fill = "firebrick") + coord_flip() +
+  labs(title = "Top 15 EV Models in Washington", x = "Model", y = "Number of vehicles")
+```
+
+The table and chart show the ten most popular EV models in Washington. The Tesla Model Y is first with 66,545 vehicles, or about 22.2% of all registered EVs. The Tesla Model 3 is second at about 13.1% (39,391 vehicles). The Nissan Leaf is the most popular non-Tesla model at about 4.5% (13,453). After that come the Tesla Model S (2.6%), Chevrolet Bolt EV (2.5%), Hyundai Ioniq 5 (2.5%), Tesla Model X (2.4%), Ford Mustang Mach-E (2.3%), Volkswagen ID.4 (2.1%), and Rivian R1S (1.9%). Just the Model Y and Model 3 make up over a third of all the EVs, and after those two the percentages drop quickly.
+
+## 3.4 City
+
+```{r cities}
+city_tbl <- ev %>% filter(!is.na(city)) %>% count(city, sort = TRUE) %>% mutate(percent = round(100 * n / sum(n), 1))
+kable(head(city_tbl, 15))
+ggplot(head(city_tbl, 15), aes(x = reorder(city, n), y = n)) +
+  geom_col(fill = "blue") + coord_flip() +
+  labs(title = "Cities with the Most Registered EVs", x = "City", y = "Number of vehicles")
+```
+
+The table and chart show the ten cities with the most registered EVs. Seattle is far ahead with 45,469 vehicles, about 15.2% of all EVs in the data. Bellevue is second at about 4.8% (14,386), followed by Vancouver (3.7%), Redmond (3.4%), Bothell (3.3%), Kirkland (2.8%), Sammamish (2.7%), Renton (2.6%), Olympia (2.3%), and Tacoma (2.2%). Seattle has more than three times as many EVs as Bellevue. The top 5 cities together hold about 30.4% of all EVs, and the top 10 hold about 43.1%. Most of the top cities are in the Seattle area, and Vancouver, Olympia and Tacoma are the exceptions.
+
+```{r city-hist}
+ggplot(city_tbl, aes(x = n)) +
+  geom_histogram(bins = 40, fill = "steelblue", color = "white") +
+  scale_x_log10() +
+  labs(title = "How Many EVs Does Each City Have? (log scale)", x = "Vehicles in the city (log scale)", y = "Number of cities")
+```
+
+This histogram shows how many cities fall into each range of vehicle counts. I used a log scale because a few cities have tens of thousands of vehicles while most have very few. The median city only has 3 vehicles, so most Washington cities in this data have a small number of EVs, which means any "most popular car" result for a small city is based on very few cars.
+
+## 3.5 Most popular models in each of the top 5 cities (preview of the main objective)
+
+```{r top-by-city}
+top5 <- head(city_tbl$city, 5)
+ev %>%
+  filter(city %in% top5) %>%
+  count(city, make, model, sort = TRUE) %>%
+  group_by(city) %>%
+  slice_max(n, n = 3, with_ties = FALSE) %>%
+  ungroup() %>%
+  kable(caption = "Top 3 models in each of the 5 cities with the most EVs")
+```
+
+This table starts on my main goal. It shows the three most popular models in each of the five biggest EV cities. The same two Tesla models come up at the top in these cities, so the top models are not very different from city to city.
+
+```{r top-non-tesla}
+ev %>%
+  filter(city %in% top5, make != "TESLA") %>%
+  count(city, make, model, sort = TRUE) %>%
+  group_by(city) %>%
+  slice_max(n, n = 3, with_ties = FALSE) %>%
+  ungroup() %>%
+  kable(caption = "Top 3 non-Tesla models in each of the 5 cities with the most EVs")
+```
+
+Because Tesla is so dominant, I also removed it to see what else is popular. This table shows that once Tesla is excluded, the Nissan Leaf is the top car in all five cities, but the cars behind it differ. Examples are the Hyundai Ioniq 5, Rivian R1S, BMW X5, Chevrolet Bolt EV, and Toyota RAV4 Prime. So the rankings differ more from city to city.
+
+# 4. Data Cleanliness
+
+## 4.1 Missing values
+
+```{r na}
+na_tbl <- tibble(Variable = names(ev),
+                 Missing = sapply(ev, function(x) sum(is.na(x))),
+                 Percent = round(100 * Missing / nrow(ev), 3))
+kable(na_tbl)
+```
+
+This table counts the empty (NA) cells in each column. Make, model, and EV type have **no** missing values. City has 11 missing values out of about 300,000 rows, which is a tiny share. I will leave those rows out whenever I count by city and keep them otherwise.
+
+## 4.2 Spelling and consistency
+
+```{r spelling}
+# Check the ORIGINAL city names for names that differ only by capitalization
+city_issue <- ev_raw %>%
+  distinct(City) %>%
+  filter(!is.na(City)) %>%
+  mutate(clean = tolower(trimws(City))) %>%
+  group_by(clean) %>% filter(n() > 1) %>% arrange(clean)
+kable(city_issue %>% select(City), caption = "City names spelled with different capitalization in the raw data")
+
+# Models whose name includes the vehicle type in parentheses
+paren_models <- ev %>% filter(grepl("\\(", model)) %>% distinct(make, model)
+kable(paren_models, caption = "Model names that contain extra text in parentheses")
+
+# Very rare makes
+rare_makes <- make_tbl %>% filter(n < 10)
+```
+
+A few city names were spelled with different capitalization, such as "McCleary" and "Mccleary." Left alone, R would count them as two different cities. I fixed this when loading the data by converting every city to the same capitalization. Make names are consistent (all capital letters). Some model names are harder to read, since some include extra text like "(PHEV)" in the model name, and many are just codes like "330E" or "I3," so I will need to be careful when grouping models. There are also 9 makes with fewer than 10 cars. These are real but rare brands, so I will keep them, but they will not matter much for the "most popular" results.
+
+## 4.3 Duplicates and observations removed
+
+```{r dups}
+dup_rows <- sum(duplicated(ev))
+```
+
+With only four columns, 0 rows look identical to another row. This is expected and is not an error, because thousands of people own the same make and model in the same city. Each row is a separate car, so I dont remove them. So far I have not removed any rows from the data.
+
+## 4.4 Are features related?
+
+```{r related}
+make_type <- ev %>%
+  group_by(make) %>%
+  summarise(vehicles = n(), pct_BEV = round(100 * mean(grepl("BEV", ev_type)), 1)) %>%
+  arrange(desc(vehicles)) %>%
+  head(10)
+kable(make_type, caption = "Share of vehicles that are fully electric (BEV), for the 10 biggest makes")
+```
+
+With only categorical variables I cannot calculate a regular correlation, but I can look at whether the features are related. Make and EV type are clearly related. Tesla is 100% BEV, while other makes such as Ford and Toyota sell a mix of BEVs and plug-in hybrids. Make and model are also strongly related, since each model belongs to one make (for example, Model Y is always Tesla), so model carries the same information as make plus more detail.
+
+# Discussion
+
+My overall impression is that this dataset is large, fairly tidy, and a good fit for my question about popular EVs in Washington cities. After keeping only the make, model, city, and EV type columns, I have 299,705 vehicles across 939 cities. The most interesting findings are that Teslas makes up about 41% of all registrations, those registrations are concentrated in a few cities (led by Seattle, then Bellevue, Vancouver and Redmond), and that about 81% of the vehicles are fully electric (BEV). The cleaning checks found only small problems: 11 missing cities, a few city names with inconsistent capitalization, and some model names that are messy or contain extra text.
+
+I have a few questions and concerns about the data. First, this is a snapshot of currently registered vehicles, not sales over time, so it can tell me what is popular now but not how popularity changed. Second, the data does not include charger locations, which is what my original idea about compatibility depends on, so I may have to look for a second dataset or limit my claims to "most popular cars per city." Third, large cities naturally have more cars, and because Tesla is so dominant, the "most popular car" is the same in almost every big city, which makes the main question less interesting. Fourth, most cities have only a few vehicles, so results for small cities will not be reliable.
+
+For my next step, I plan to focus on my main objective. I will use `dplyr` to group by city and then by make and model, find the top models in each city, and compare them using faceted bar charts in `ggplot2`. Because Tesla dominates, I will look at both the overall ranking and the ranking without Tesla, and I will compare each city's share of each model instead of raw counts. I will also compare BEVs and PHEVs across cities. I will limit the city comparison to cities with enough vehicles (for example, at least 100), and I will clean the model names so the same car is not counted under different names.
+
+# References
+
+- Washington State Department of Licensing. *Electric Vehicle Population Data*. Data.gov. <https://catalog.data.gov/dataset/electric-vehicle-population-data>
